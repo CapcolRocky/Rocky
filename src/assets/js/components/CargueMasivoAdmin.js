@@ -22,6 +22,8 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
           el('th',{},['Documento']),
           el('th',{},['Nombre']),
           el('th',{},['Telefono']),
+          el('th',{},['Cargo codigo']),
+          el('th',{},['Sede codigo']),
           el('th',{},['Cargo']),
           el('th',{},['Sede']),
           el('th',{},['Fecha ingreso']),
@@ -89,8 +91,8 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
   });
 
   btnTemplate.addEventListener('click',()=>{
-    const headers=['documento','nombre','telefono','cargo','sede','fecha ingreso'];
-    const sample=['10000001','Empleado ejemplo','3000000000','Operario','Sede Norte','2026-02-13'];
+    const headers=['documento','nombre','telefono','cargo codigo','sede codigo','fecha ingreso'];
+    const sample=['10000001','Empleado ejemplo','3000000000','CAR-0001','SED-0001','2026-02-13'];
     downloadCsv('plantilla_empleados.csv',[headers,sample]);
   });
 
@@ -106,6 +108,8 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
       el('td',{},[r.documento||'-']),
       el('td',{},[r.nombre||'-']),
       el('td',{},[r.telefono||'-']),
+      el('td',{},[r.cargoCodigo||'-']),
+      el('td',{},[r.sedeCodigo||'-']),
       el('td',{},[r.cargoNombre||'-']),
       el('td',{},[r.sedeNombre||'-']),
       el('td',{},[r.fechaIngreso||'-']),
@@ -124,8 +128,8 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
   function validateRows(rows, employeesList, cargosList, sedesList){
     const existingDocs=new Set((employeesList||[]).map(e=> String(e.documento||'').trim()).filter(Boolean));
     const localDocs=new Set();
-    const cargoByName=new Map((cargosList||[]).map(c=> [String(c.nombre||'').trim().toLowerCase(), c]));
-    const sedeByName=new Map((sedesList||[]).map(s=> [String(s.nombre||'').trim().toLowerCase(), s]));
+    const cargoByCode=new Map((cargosList||[]).map(c=> [String(c.codigo||'').trim().toLowerCase(), c]));
+    const sedeByCode=new Map((sedesList||[]).map(s=> [String(s.codigo||'').trim().toLowerCase(), s]));
     const errors=[]; const valid=[]; const preview=[];
 
     rows.forEach((raw,idx)=>{
@@ -133,27 +137,27 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
       const documento=String(raw.documento||'').trim();
       const nombre=String(raw.nombre||'').trim();
       const telefono=String(raw.telefono||'').trim();
-      const cargoTxt=String(raw.cargo||'').trim().toLowerCase();
-      const sedeTxt=String(raw.sede||'').trim().toLowerCase();
+      const cargoCode=String(raw.cargoCodigo||raw.cargo||'').trim().toLowerCase();
+      const sedeCode=String(raw.sedeCodigo||raw.sede||'').trim().toLowerCase();
       const fechaIngreso=normalizeDate(raw.fechaIngreso||raw.fecha_ingreso||raw.fecha||'');
       const issues=[];
       if(!documento) issues.push('Documento requerido.');
       if(!nombre) issues.push('Nombre requerido.');
       if(!telefono) issues.push('Telefono requerido.');
-      if(!cargoTxt) issues.push('Cargo requerido.');
-      if(!sedeTxt) issues.push('Sede requerida.');
+      if(!cargoCode) issues.push('Cargo codigo requerido.');
+      if(!sedeCode) issues.push('Sede codigo requerida.');
       if(!fechaIngreso) issues.push('Fecha ingreso invalida.');
-      const cargo=cargoByName.get(cargoTxt);
-      const sede=sedeByName.get(sedeTxt);
-      if(cargoTxt && !cargo) issues.push(`Cargo no existe: ${cargoTxt}`);
-      if(sedeTxt && !sede) issues.push(`Sede no existe: ${sedeTxt}`);
+      const cargo=cargoByCode.get(cargoCode);
+      const sede=sedeByCode.get(sedeCode);
+      if(cargoCode && !cargo) issues.push(`Cargo no existe: ${cargoCode}`);
+      if(sedeCode && !sede) issues.push(`Sede no existe: ${sedeCode}`);
       if(documento && existingDocs.has(documento)) issues.push('Documento ya existe en empleados.');
       if(documento && localDocs.has(documento)) issues.push('Documento duplicado en archivo.');
       if(documento) localDocs.add(documento);
 
       if(issues.length){
         errors.push({ row:rowNum, message: issues.join(' ') });
-        preview.push({ documento, nombre, telefono, cargoNombre:cargo?.nombre||raw.cargo||'', sedeNombre:sede?.nombre||raw.sede||'', fechaIngreso, ok:false });
+        preview.push({ documento, nombre, telefono, cargoCodigo:raw.cargoCodigo||raw.cargo||'', sedeCodigo:raw.sedeCodigo||raw.sede||'', cargoNombre:cargo?.nombre||'', sedeNombre:sede?.nombre||'', fechaIngreso, ok:false });
         return;
       }
 
@@ -167,7 +171,7 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
         sedeNombre:sede.nombre,
         fechaIngreso: new Date(`${fechaIngreso}T00:00:00`)
       });
-      preview.push({ documento, nombre, telefono, cargoNombre:cargo.nombre, sedeNombre:sede.nombre, fechaIngreso, ok:true });
+      preview.push({ documento, nombre, telefono, cargoCodigo:cargo.codigo, sedeCodigo:sede.codigo, cargoNombre:cargo.nombre, sedeNombre:sede.nombre, fechaIngreso, ok:true });
     });
 
     return { rows, valid, errors, preview };
@@ -211,15 +215,15 @@ export const CargueMasivoAdmin=(mount,deps={})=>{
   }
 
   function normalizeInputRow(obj){
-    const out={ documento:'', nombre:'', telefono:'', cargo:'', sede:'', fechaIngreso:'' };
+    const out={ documento:'', nombre:'', telefono:'', cargoCodigo:'', sedeCodigo:'', fechaIngreso:'' };
     Object.keys(obj||{}).forEach((k)=>{
       const key=String(k||'').trim().toLowerCase();
       const v=String(obj[k]??'').trim();
       if(key==='documento' || key==='doc') out.documento=v;
       if(key==='nombre' || key==='nombre completo') out.nombre=v;
       if(key==='telefono' || key==='celular' || key==='numero cel') out.telefono=v;
-      if(key==='cargo') out.cargo=v;
-      if(key==='sede') out.sede=v;
+      if(key==='cargo codigo' || key==='cargo_codigo' || key==='cargo') out.cargoCodigo=v;
+      if(key==='sede codigo' || key==='sede_codigo' || key==='sede') out.sedeCodigo=v;
       if(key==='fecha ingreso' || key==='fecha_ingreso' || key==='fecha') out.fechaIngreso=v;
     });
     return out;

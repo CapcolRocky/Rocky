@@ -20,6 +20,8 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
       el('table',{className:'table',id:'tblPreview'},[
         el('thead',{},[ el('tr',{},[
           el('th',{},['Nombre sede']),
+          el('th',{},['Dependencia codigo']),
+          el('th',{},['Zona codigo']),
           el('th',{},['Dependencia']),
           el('th',{},['Zona']),
           el('th',{},['Nro operarios']),
@@ -87,8 +89,8 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
   });
 
   btnTemplate.addEventListener('click',()=>{
-    const headers=['nombre sede','dependencia','zona','nro operarios'];
-    const sample=['Sede Norte','Dependencia Principal','Zona 1','12'];
+    const headers=['nombre sede','dependencia codigo','zona codigo','nro operarios'];
+    const sample=['Sede Norte','DEP-0001','ZON-0001','12'];
     downloadCsv('plantilla_sedes.csv',[headers,sample]);
   });
 
@@ -102,6 +104,8 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
     const tb=qs('#tblPreview tbody',ui);
     tb.replaceChildren(...rows.map(r=>el('tr',{},[
       el('td',{},[r.nombre||'-']),
+      el('td',{},[r.dependenciaCodigo||'-']),
+      el('td',{},[r.zonaCodigo||'-']),
       el('td',{},[r.dependenciaNombre||'-']),
       el('td',{},[r.zonaNombre||'-']),
       el('td',{},[String(r.numeroOperarios??'-')]),
@@ -120,25 +124,25 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
   function validateRows(rows, sedesList, dependencies, zoneList){
     const existingNames=new Set((sedesList||[]).map(s=> String(s.nombre||'').trim().toLowerCase()).filter(Boolean));
     const localNames=new Set();
-    const depByName=new Map((dependencies||[]).map(d=> [String(d.nombre||'').trim().toLowerCase(), d]));
-    const zoneByName=new Map((zoneList||[]).map(z=> [String(z.nombre||'').trim().toLowerCase(), z]));
+    const depByCode=new Map((dependencies||[]).map(d=> [String(d.codigo||'').trim().toLowerCase(), d]));
+    const zoneByCode=new Map((zoneList||[]).map(z=> [String(z.codigo||'').trim().toLowerCase(), z]));
     const errors=[]; const valid=[]; const preview=[];
 
     rows.forEach((raw,idx)=>{
       const rowNum=idx+2;
       const nombre=String(raw.nombre||raw.sede||'').trim();
-      const depTxt=String(raw.dependencia||raw.dependenciaNombre||'').trim().toLowerCase();
-      const zoneTxt=String(raw.zona||raw.zonaNombre||'').trim().toLowerCase();
+      const depCode=String(raw.dependenciaCodigo||raw.dependencia||'').trim().toLowerCase();
+      const zoneCode=String(raw.zonaCodigo||raw.zona||'').trim().toLowerCase();
       const ops=Number(String(raw.numeroOperarios||raw.operarios||'').trim());
       const issues=[];
       if(!nombre) issues.push('Nombre sede requerido.');
-      if(!depTxt) issues.push('Dependencia requerida.');
-      if(!zoneTxt) issues.push('Zona requerida.');
+      if(!depCode) issues.push('Dependencia codigo requerida.');
+      if(!zoneCode) issues.push('Zona codigo requerida.');
       if(!Number.isFinite(ops) || ops<0 || !Number.isInteger(ops)) issues.push('Nro operarios invalido.');
-      const dep=depByName.get(depTxt);
-      const zone=zoneByName.get(zoneTxt);
-      if(depTxt && !dep) issues.push(`Dependencia no existe: ${depTxt}`);
-      if(zoneTxt && !zone) issues.push(`Zona no existe: ${zoneTxt}`);
+      const dep=depByCode.get(depCode);
+      const zone=zoneByCode.get(zoneCode);
+      if(depCode && !dep) issues.push(`Dependencia no existe: ${depCode}`);
+      if(zoneCode && !zone) issues.push(`Zona no existe: ${zoneCode}`);
       const key=nombre.toLowerCase();
       if(key && existingNames.has(key)) issues.push('Sede ya existe.');
       if(key && localNames.has(key)) issues.push('Sede duplicada en archivo.');
@@ -146,7 +150,7 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
 
       if(issues.length){
         errors.push({ row:rowNum, message: issues.join(' ') });
-        preview.push({ nombre, dependenciaNombre:raw.dependencia||'', zonaNombre:raw.zona||'', numeroOperarios:ops, ok:false });
+        preview.push({ nombre, dependenciaCodigo:raw.dependenciaCodigo||raw.dependencia||'', zonaCodigo:raw.zonaCodigo||raw.zona||'', dependenciaNombre:dep?.nombre||'', zonaNombre:zone?.nombre||'', numeroOperarios:ops, ok:false });
         return;
       }
 
@@ -158,7 +162,7 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
         zonaNombre:zone.nombre,
         numeroOperarios:ops
       });
-      preview.push({ nombre, dependenciaNombre:dep.nombre, zonaNombre:zone.nombre, numeroOperarios:ops, ok:true });
+      preview.push({ nombre, dependenciaCodigo:dep.codigo, zonaCodigo:zone.codigo, dependenciaNombre:dep.nombre, zonaNombre:zone.nombre, numeroOperarios:ops, ok:true });
     });
     return { rows, valid, errors, preview };
   }
@@ -172,7 +176,8 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
       const wb=mod.read(buff, { type:'array' });
       const first=wb.SheetNames[0];
       const ws=wb.Sheets[first];
-      return mod.utils.sheet_to_json(ws,{ defval:'' });
+      const rows=mod.utils.sheet_to_json(ws,{ defval:'' });
+      return rows.map(r=> normalizeInputRow(r));
     }
     throw new Error('Formato no soportado. Usa CSV/XLS/XLSX.');
   }
@@ -197,8 +202,21 @@ export const CargueMasivoSedesAdmin=(mount,deps={})=>{
     return rows.slice(1).map(cols=>{
       const obj={};
       headers.forEach((h,i)=>{ obj[h]=cols[i]??''; });
-      return obj;
+      return normalizeInputRow(obj);
     });
+  }
+
+  function normalizeInputRow(obj){
+    const out={ nombre:'', dependenciaCodigo:'', zonaCodigo:'', numeroOperarios:'' };
+    Object.keys(obj||{}).forEach((k)=>{
+      const key=String(k||'').trim().toLowerCase();
+      const v=String(obj[k]??'').trim();
+      if(key==='nombre sede' || key==='nombre' || key==='sede') out.nombre=v;
+      if(key==='dependencia codigo' || key==='dependencia_codigo' || key==='dependencia') out.dependenciaCodigo=v;
+      if(key==='zona codigo' || key==='zona_codigo' || key==='zona') out.zonaCodigo=v;
+      if(key==='nro operarios' || key==='numero operarios' || key==='operarios') out.numeroOperarios=v;
+    });
+    return out;
   }
 
   function downloadCsv(filename, rows){
